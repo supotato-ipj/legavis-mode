@@ -253,8 +253,8 @@ pwsh -File tools/legavis-skills/Test-LegavisSkillView.ps1
 
 4. **仓库分支**：按需取舍。
 
-   - 想留着以后再做：`git branch` 保留 `fix/code-review-findings` 即可，不必删。
-   - 想彻底清掉：在主检出目录里 `git branch -D fix/code-review-findings`（若该分支还挂在 worktree 上，先 `git worktree remove <worktree 路径>` 再删分支）。
+   - 想留着以后再做：保留集成分支 `feat/legavis-mode` 即可，不必删。
+   - 想彻底清掉：在主检出目录里 `git branch -D feat/legavis-mode`（若该分支还挂在 worktree 上，先 `git worktree remove <worktree 路径>` 再删分支）。
 
 回滚后验证：`plugin_manager list_bundles` 里不再有 `@local/dsh-legavis-mode`，`plugin_manager list_plugins` 里三行记忆相关行都是 `enabled: true`。
 
