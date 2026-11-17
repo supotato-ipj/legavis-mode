@@ -39,11 +39,37 @@ async function main() {
   const skills = await ctx.skills.list()
   const names = skills.map(skill => skill.name).sort()
 
+  // 负向：白名单外的技能在 legavis 模式下既不出现，也加载不到。
+  const outside = ['arkcli-usage', 'arkcli-gen', 'gtd-triage', 'obsidian-annotations', 'writing-shape']
+  const inCatalog = outside.filter(name => names.includes(name))
+  const loadable = []
+  for (const name of outside) {
+    const definition = await ctx.skills.get(name)
+    if (definition !== undefined) loadable.push(name)
+  }
+
+  // 已知行为（非失败断言）：能力级隔离不是路径级隔离，白名单外的技能文件仍在磁盘上，
+  // 带 read/pwsh 的 agent 直接按路径仍读得到。防线是案件项目 AGENTS.md 的纪律条款。
+  const fs = require('node:fs')
+  const agentsHome = (process.env.DSH_AGENTS_HOME || path.join(os.homedir(), '.agents')).trim()
+  const outsidePath = path.join(agentsHome, 'skills', 'arkcli-usage', 'SKILL.md')
+  const pathReadable = fs.existsSync(outsidePath)
+
   console.log(JSON.stringify({
     profile,
     viewDir,
     count: names.length,
     names,
+    negative: {
+      checked: outside,
+      presentInCatalog: inCatalog,
+      loadableViaSkillTool: loadable,
+    },
+    knownBehaviour: {
+      note: '能力级隔离不是路径级隔离：白名单外技能文件仍在磁盘上，按路径直读仍可读。',
+      pathStillReadable: pathReadable,
+      path: outsidePath,
+    },
   }, null, 2))
 
   await ctx.fiber.dispose()
