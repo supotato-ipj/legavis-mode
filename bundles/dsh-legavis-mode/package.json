@@ -1,0 +1,9 @@
+{
+  "name": "@local/dsh-legavis-mode",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Legavis 推理模式的 DSH agent preset 模式包：以白名单视图目录做能力级技能隔离。",
+  "files": ["cordis.patch.yml", "package.json"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}
