@@ -4,7 +4,7 @@ legavis 模式的技能白名单是一份清单文件，视图目录是脚本按
 
 ## 单一真相源
 
-`skills-allowlist.txt`（仓库根）是技能白名单的唯一真相源：每行一个技能目录名，共 40 个——legavis／法律研究系 13 个 + matt 系列 27 个。`#` 开头是分区注释，空行忽略。
+`skills-allowlist.txt`（仓库根）是技能白名单的唯一真相源：每行一个技能目录名，当前 40 个（以 `skills-allowlist.txt` 为准）。清单分两段：legavis／法律研究系与 matt 系列。`#` 开头是分区注释，空行忽略。
 
 白名单变更只改清单，不改模式声明。
 
@@ -35,4 +35,8 @@ pwsh -File tools/legavis-skills/New-LegavisSkillView.ps1
 pwsh -File tools/legavis-skills/Test-LegavisSkillView.ps1
 ```
 
-脚本级测试只断言产物：清单里的每个技能在视图目录里各自可读到 `SKILL.md`；重复执行后条目集合不变；清单含不存在的技能时报错并点名缺失项；视图条目是联接而非副本。用例一律走临时视图目录，不触碰真实的 `C:\Users\HUAWEI\.dsh\legavis-skills`。
+脚本级测试只断言产物：清单里的每个技能在视图目录里各自可读到 `SKILL.md`；重复执行后条目集合不变；清单含不存在的技能时报错并点名缺失项；清单含非法技能名时报错并点名违规条目；视图条目是联接而非副本。用例一律走临时视图目录，不触碰真实的 `C:\Users\HUAWEI\.dsh\legavis-skills`。
+
+清单读取与联接目标读取由 `tools/legavis-skills/LegavisSkillView.Common.ps1` 提供，生成器与测试脚本点源同一份——技能名校验只有一份实现，且被测试覆盖。
+
+清单条目数的基线写在 `Test-LegavisSkillView.ps1` 的 `$script:ExpectedAllowlistSize`：清单增删技能时，测试会失败提示同步更新该常量。

@@ -8,7 +8,11 @@
     a) 清单里的每个技能在视图目录里各自可读到 SKILL.md；
     b) 重复执行生成器，视图目录条目集合不变（幂等）；
     c) 清单含不存在的技能时，生成器失败且报错点名缺失项；
-    d) 视图目录里的条目是联接（junction），指向源目录的真实技能目录，不是副本。
+    d) 视图目录里的条目是联接（junction），指向源目录的真实技能目录，不是副本；
+    e) 清单含非法技能名时，生成器失败且报错点名违规条目。
+
+  清单读取与联接目标读取与生成器共用 tools/legavis-skills/LegavisSkillView.Common.ps1，
+  技能名校验因此只有一份实现，且被本脚本的用例 e 覆盖。
 
   所有用例都用临时视图目录，不触碰真实的 C:\Users\HUAWEI\.dsh\legavis-skills。
 
@@ -26,6 +30,13 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $Generator = Join-Path $RepoRoot 'tools\legavis-skills\New-LegavisSkillView.ps1'
 $Manifest = Join-Path $RepoRoot 'skills-allowlist.txt'
+
+# 清单读取与联接目标读取与生成器共用
+. (Join-Path $PSScriptRoot 'LegavisSkillView.Common.ps1')
+
+# 白名单条目数的基线：规格钉死的值。清单增删技能时必须同步更新本常量，
+# 否则下面的用例会失败——这是有意让基线变更显式发生的唯一一处。
+$script:ExpectedAllowlistSize = 40
 
 # ── 断言助手（Pester 不可用时的最小实现）────────────────────
 # 本机若装有 Pester 5 及以上，可用 Invoke-Pester 跑同一批用例；
@@ -52,29 +63,10 @@ function Assert-Contains {
 }
 
 # ── 产物辅助 ────────────────────────────────────────────────
-function Get-ManifestNames {
-  param([string]$Path)
-  $names = [System.Collections.Generic.List[string]]::new()
-  foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
-    $name = ($line -split '#', 2)[0].Trim()
-    if ([string]::IsNullOrWhiteSpace($name)) { continue }
-    if (-not $names.Contains($name)) { $names.Add($name) }
-  }
-  return $names
-}
-
 function Get-ViewEntries {
   param([string]$Path)
   if (-not (Test-Path -LiteralPath $Path)) { return @() }
   return @(Get-ChildItem -LiteralPath $Path -Force | Select-Object -ExpandProperty Name | Sort-Object)
-}
-
-function Get-LinkTarget {
-  param([string]$Path)
-  $item = Get-Item -LiteralPath $Path -Force
-  $target = $item.Target
-  if ($null -eq $target -or @($target).Count -eq 0) { $target = $item.LinkTarget }
-  return [string]@($target)[0]
 }
 
 function Invoke-Generator {
@@ -94,17 +86,30 @@ function Invoke-Generator {
   return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderr }
 }
 
+# 生成器调用参数：所有用例共用同一组参数，只有清单与视图根不同。
+function New-GeneratorArguments {
+  param(
+    [string]$ViewRoot,
+    [string]$ManifestPath = $Manifest
+  )
+  return @(
+    '-NoProfile', '-File', $Generator,
+    '-ManifestPath', $ManifestPath,
+    '-SourceRoot', $SourceRoot,
+    '-ViewRoot', $ViewRoot
+  )
+}
+
 # ── 用例 ────────────────────────────────────────────────────
 
 function Test-ManifestEntriesAreReadable {
   $viewRoot = Join-Path $env:TEMP ("legavis-view-a-" + [guid]::NewGuid().ToString('N'))
   try {
-    $run = Invoke-Generator @('-NoProfile', '-File', $Generator, '-ManifestPath', $Manifest,
-      '-SourceRoot', $SourceRoot, '-ViewRoot', $viewRoot)
+    $run = Invoke-Generator (New-GeneratorArguments -ViewRoot $viewRoot)
     Assert-Equal 0 $run.ExitCode "生成器应当成功退出（stderr：$($run.StdErr)）"
 
-    $names = Get-ManifestNames $Manifest
-    Assert-True ($names.Count -eq 40) "清单应当有 40 个条目，实际 $($names.Count)"
+    $names = Get-LegavisManifestNames $Manifest
+    Assert-Equal $script:ExpectedAllowlistSize $names.Count "清单条目数应当等于基线 $script:ExpectedAllowlistSize"
 
     foreach ($name in $names) {
       $skillFile = Join-Path $viewRoot (Join-Path $name 'SKILL.md')
@@ -121,8 +126,7 @@ function Test-ManifestEntriesAreReadable {
 function Test-GeneratorIsIdempotent {
   $viewRoot = Join-Path $env:TEMP ("legavis-view-b-" + [guid]::NewGuid().ToString('N'))
   try {
-    $arguments = @('-NoProfile', '-File', $Generator, '-ManifestPath', $Manifest,
-      '-SourceRoot', $SourceRoot, '-ViewRoot', $viewRoot)
+    $arguments = New-GeneratorArguments -ViewRoot $viewRoot
     $first = Invoke-Generator $arguments
     Assert-Equal 0 $first.ExitCode "第一次执行应当成功退出（stderr：$($first.StdErr)）"
     $afterFirst = Get-ViewEntries $viewRoot
@@ -133,7 +137,7 @@ function Test-GeneratorIsIdempotent {
 
     Assert-Equal ($afterFirst -join ',') ($afterSecond -join ',') "重复执行后视图目录条目集合应不变"
 
-    $names = Get-ManifestNames $Manifest
+    $names = Get-LegavisManifestNames $Manifest
     foreach ($name in $names) {
       Assert-True (Test-Path -LiteralPath (Join-Path $viewRoot (Join-Path $name 'SKILL.md'))) `
         "重复执行后 $name\SKILL.md 仍应可读"
@@ -148,13 +152,12 @@ function Test-MissingSkillFailsLoudly {
   $viewRoot = Join-Path $env:TEMP ("legavis-view-c-" + [guid]::NewGuid().ToString('N'))
   $badManifest = Join-Path $env:TEMP ("legavis-manifest-c-" + [guid]::NewGuid().ToString('N') + '.txt')
   try {
-    $names = Get-ManifestNames $Manifest
+    $names = Get-LegavisManifestNames $Manifest
     $bogus = @('no-such-skill-alpha', 'no-such-skill-beta')
     $lines = @($names[0], $bogus[0], $names[1], $bogus[1]) + ($names | Select-Object -Skip 2)
     [System.IO.File]::WriteAllLines($badManifest, $lines)
 
-    $run = Invoke-Generator @('-NoProfile', '-File', $Generator, '-ManifestPath', $badManifest,
-      '-SourceRoot', $SourceRoot, '-ViewRoot', $viewRoot)
+    $run = Invoke-Generator (New-GeneratorArguments -ViewRoot $viewRoot -ManifestPath $badManifest)
     $output = $run.StdOut + "`n" + $run.StdErr
     Assert-True ($run.ExitCode -ne 0) "清单含不存在的技能时生成器应当以非零码退出（输出：$output）"
     Assert-Contains $output $bogus[0] "报错应当点名缺失技能 $($bogus[0])"
@@ -166,20 +169,40 @@ function Test-MissingSkillFailsLoudly {
   }
 }
 
+function Test-IllegalSkillNameFailsLoudly {
+  $viewRoot = Join-Path $env:TEMP ("legavis-view-g-" + [guid]::NewGuid().ToString('N'))
+  $badManifest = Join-Path $env:TEMP ("legavis-manifest-g-" + [guid]::NewGuid().ToString('N') + '.txt')
+  try {
+    $names = Get-LegavisManifestNames $Manifest
+    # 非法名：含空格与中文，匹配不了技能目录名的合法形态
+    $illegal = 'bad skill 名'
+    $lines = @($names[0], $illegal) + ($names | Select-Object -Skip 1)
+    [System.IO.File]::WriteAllLines($badManifest, $lines)
+
+    $run = Invoke-Generator (New-GeneratorArguments -ViewRoot $viewRoot -ManifestPath $badManifest)
+    $output = $run.StdOut + "`n" + $run.StdErr
+    Assert-True ($run.ExitCode -ne 0) "清单含非法技能名时生成器应当以非零码退出（输出：$output）"
+    Assert-Contains $output $illegal "报错应当点名违规条目 '$illegal'"
+  }
+  finally {
+    if (Test-Path -LiteralPath $viewRoot) { Remove-Item -LiteralPath $viewRoot -Recurse -Force }
+    if (Test-Path -LiteralPath $badManifest) { Remove-Item -LiteralPath $badManifest -Force }
+  }
+}
+
 function Test-ViewEntriesAreLinks {
   $viewRoot = Join-Path $env:TEMP ("legavis-view-d-" + [guid]::NewGuid().ToString('N'))
   try {
-    $run = Invoke-Generator @('-NoProfile', '-File', $Generator, '-ManifestPath', $Manifest,
-      '-SourceRoot', $SourceRoot, '-ViewRoot', $viewRoot)
+    $run = Invoke-Generator (New-GeneratorArguments -ViewRoot $viewRoot)
     Assert-Equal 0 $run.ExitCode "生成器应当成功退出（stderr：$($run.StdErr)）"
 
-    $names = Get-ManifestNames $Manifest
+    $names = Get-LegavisManifestNames $Manifest
     foreach ($name in $names) {
       $viewPath = Join-Path $viewRoot $name
       $item = Get-Item -LiteralPath $viewPath -Force
       Assert-True (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) `
         "$name 应是联接（reparse point），不是副本"
-      $target = Get-LinkTarget $viewPath
+      $target = Get-LegavisLinkTarget $viewPath
       $expected = Join-Path $SourceRoot $name
       Assert-Equal $expected $target "$name 的联接目标应当是源目录里的真实技能目录"
     }
@@ -207,8 +230,7 @@ function Test-StaleLinksAreCleanedAndSourceUntouched {
     $lockPath = Join-Path (Split-Path -Parent $SourceRoot) '.skill-lock.json'
     $lockStamp = if (Test-Path -LiteralPath $lockPath) { (Get-Item -LiteralPath $lockPath).LastWriteTimeUtc } else { $null }
 
-    $run = Invoke-Generator @('-NoProfile', '-File', $Generator, '-ManifestPath', $Manifest,
-      '-SourceRoot', $SourceRoot, '-ViewRoot', $viewRoot)
+    $run = Invoke-Generator (New-GeneratorArguments -ViewRoot $viewRoot)
     Assert-Equal 0 $run.ExitCode "生成器应当成功退出（stderr：$($run.StdErr)）"
 
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $viewRoot $staleName))) `
@@ -238,8 +260,7 @@ function Test-RealDirectoryInSlotFailsInsteadOfDeleting {
     New-Item -ItemType Directory -Path $slot -Force | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $slot 'mine.txt'), 'do not delete')
 
-    $run = Invoke-Generator @('-NoProfile', '-File', $Generator, '-ManifestPath', $Manifest,
-      '-SourceRoot', $SourceRoot, '-ViewRoot', $viewRoot)
+    $run = Invoke-Generator (New-GeneratorArguments -ViewRoot $viewRoot)
     Assert-True ($run.ExitCode -ne 0) "清单槽位被真实目录占住时生成器应当以非零码退出（输出：$($run.StdOut)$($run.StdErr)）"
     Assert-Contains ($run.StdOut + $run.StdErr) 'tdd' "报错应当点名被占用的槽位 tdd"
     Assert-True (Test-Path -LiteralPath (Join-Path $slot 'mine.txt')) "占槽位的真实目录不应被删除"
@@ -254,6 +275,7 @@ $cases = @(
   @{ Name = '清单里的每个技能在视图目录可读到 SKILL.md'; Body = ${function:Test-ManifestEntriesAreReadable} }
   @{ Name = '重复执行生成器，视图目录条目集合不变（幂等）'; Body = ${function:Test-GeneratorIsIdempotent} }
   @{ Name = '清单含不存在的技能时生成器失败并点名缺失项'; Body = ${function:Test-MissingSkillFailsLoudly} }
+  @{ Name = '清单含非法技能名时生成器失败并点名违规条目'; Body = ${function:Test-IllegalSkillNameFailsLoudly} }
   @{ Name = '视图目录里的条目是联接而非副本'; Body = ${function:Test-ViewEntriesAreLinks} }
   @{ Name = '陈旧联接被清理，用户目录与源技能根不被改动'; Body = ${function:Test-StaleLinksAreCleanedAndSourceUntouched} }
   @{ Name = '清单槽位被真实目录占住时报错而不是删除'; Body = ${function:Test-RealDirectoryInSlotFailsInsteadOfDeleting} }

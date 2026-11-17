@@ -15,6 +15,28 @@ DSH CLI 包版本：@deepseek-ai/dsh-* 0.2.2-rc.3（web-app bundle package.json�
   - profile patch（最后一层）：`C:\Users\HUAWEI\.dsh\profiles\desktop\cordis.patch.yml`
 - 旧目录式 preset（`$DSH_HOME/.agent-presets/<id>/preset.yml` + `agent.cordis.yml`）**已废弃，无人读取**。
 
+### 1.1 模式装载失败时的诊断面
+
+preset 装载失败**不抛到启动流程**：`dsh-agent-preset-registry` 在 `activate()` 里 catch 住错误，
+把原因记进 `record.broken`，并打一条 warning 日志——
+
+```
+agent preset <config.id>: <reason>
+```
+
+（`dsh-agent-preset-registry/src/index.ts`：`this.owner.logger.warn(\`agent preset ${record.config.id}: ${record.broken}\`)`）
+
+所以「模式声明出错」表现为**静默挂载失败 + 一条 warning**，不是启动崩溃。三处可查：
+
+| 面 | 查什么 | 怎么查 |
+|---|---|---|
+| 插件管理器 | 模式包是否已安装、模式行是否 active | `plugin_manager list_bundles` / `plugin_manager list_plugins` |
+| Loader 的 Config 目录 | 该行的 schema 状态（`status: schema` 表示已按 preset 的 Config schema 校验通过） | `Config` inspect：`listConfigs` 按 `name=@deepseek-ai/dsh-agent-preset` 列出全部 preset 行 |
+| `Config` inspect 单行 | 该行的投影 schema（`id` / `plugins` / `order` 五个字段） | `listConfigs` 带 `entry=include:preset-legavis` |
+
+客户端侧还有一处人眼可见的信号：模式选择器给装载失败的 preset 打「加载失败」徽标
+（`dsh-client-ui-agent-preset` 的 `brokenBadge`），切换时也会带上原因（`switchRefused`）。
+
 ## 2. Preset schema（真实原文）
 
 `dsh-agent-preset/src/index.ts`：

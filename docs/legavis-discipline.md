@@ -6,7 +6,7 @@ legavis 模式的隔离是**能力级隔离**：白名单外的技能不出现�
 
 ## 用法
 
-把下面整段追加到**案件项目根目录**的 `AGENTS.md`（该项目的 legavis 工作区）。本仓库（legavis-mode 测试工作区）的 `AGENTS.md` 已含同一段。
+把下面整段追加到**案件项目根目录**的 `AGENTS.md`（该项目的 legavis 工作区）。本仓库（legavis-mode 工具工作区）的 `AGENTS.md` 用的也是同一组条款（措辞相同，仅排版换行不同），两份文档只有引导句不同。
 
 ## 条款正文
 
@@ -15,21 +15,19 @@ legavis 模式的隔离是**能力级隔离**：白名单外的技能不出现�
 
 在 legavis 推理模式（本项目的法律推理会话）下：
 
-- **只用白名单技能**：可用的技能是 `skills-allowlist.txt` 列出的 40 个（legavis／法律研究系 13 个 + matt 系列 27 个），
-  加上全局层的插件型技能（`prc-legal-research` 四件套、office 四件套）。清单在 legavis-mode 仓库。
+- **只用白名单技能**：可用的技能是 `skills-allowlist.txt` 列出的当前 40 个（以 `skills-allowlist.txt` 为准），
+  加上全局层的插件型技能（`prc-legal-research` 四件套、office 四件套、`diagnose-windows-sandbox-acl`）。清单在 legavis-mode 仓库。
 - **不读白名单外技能文件**：不要为了「参考某个技能的做法」去按路径打开白名单外的技能正文
   （`~/.agents/skills/<白名单外技能>/SKILL.md`）。机制上这些技能加载不到，读它们是绕开隔离；
   需要某个方法时，改用白名单内的等价技能，或把该技能加入白名单后重跑生成脚本。
-- **不写长期记忆库**：本项目不写入用户跨项目记忆库，也不写入 OpenViking 共享库。
-  案件结论一律落进项目的四区目录（`docs/facts`、`docs/argumentation`、`docs/adr`、报告目录）。
+- **不写长期记忆库**：legavis 模式下不写入用户跨项目记忆库，也不写入 OpenViking 共享库。
 - **总控入口唯一**：法律推理的总控必须经 `/legal-subsumption` 进入，不自行启动总控流程。
   `legal-subsumption`、`setup-legavis-skill`、`legavis-spec`、`legavis-report`、
   `provisional-risk-assessment`、`reasoning-process-audit` 这几个技能只允许斜杠命令触发，
   不要用 `skill` 工具直接加载它们。
-- **中间产物留在项目内**：推理记录、涵摄节点、检查报告写进项目目录，不留在会话上下文里等下一轮。
 ```
 
-## 为什么是这五条
+## 为什么是这四条
 
 | 条款 | 对应的问题 |
 |---|---|
@@ -37,6 +35,5 @@ legavis 模式的隔离是**能力级隔离**：白名单外的技能不出现�
 | 不读白名单外技能文件 | 能力级隔离挡不住按路径直读，这是机制之外唯一剩下的口子 |
 | 不写长期记忆库 | 测试运行产生的碎片会污染跨项目记忆（记忆污染，见 GLOSSARY.md） |
 | 总控入口唯一 | 总控入口被模型自行启动会打乱 legavis 的编排契约 |
-| 中间产物留在项目内 | 会话上下文是易失的，推理记录必须落盘才能复查 |
 
 模式本身管的是「看得见什么、用得着什么能力」；这几条管的是「在这个模式里该怎么做」。两者各自独立演进。

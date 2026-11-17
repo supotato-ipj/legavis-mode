@@ -9,10 +9,13 @@
   不是复制、不是搬移：改了技能正文立刻生效，也不存在第二份会走样的副本。
 
   行为约定：
+    - 清单里的条目名不合法时，点名违规条目并以非零码退出；
     - 清单里的技能在源根不存在时，一次性列出全部缺失项并以非零码退出，不静默跳过；
     - 重复执行结果一致（幂等）；执行前清掉视图根里指向源技能根的陈旧联接；
     - 视图根里的真实目录/文件绝不删除——占着清单槽位时直接报错；
     - 只读源技能根，不改、不移、不删源目录里的任何东西，也不碰 .skill-lock.json。
+
+  清单读取与联接目标读取与测试脚本共用 tools/legavis-skills/LegavisSkillView.Common.ps1。
 
 .EXAMPLE
   pwsh -File tools/legavis-skills/New-LegavisSkillView.ps1
@@ -33,6 +36,9 @@ $ErrorActionPreference = 'Stop'
 # 仓库根 = 脚本所在目录（tools/legavis-skills）的上一级
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
+# 清单读取与联接目标读取与测试脚本共用
+. (Join-Path $PSScriptRoot 'LegavisSkillView.Common.ps1')
+
 function Resolve-FullPath {
   param([string]$Path, [string]$Base)
   if ([System.IO.Path]::IsPathRooted($Path)) { return [System.IO.Path]::GetFullPath($Path) }
@@ -43,26 +49,6 @@ function Write-Fail {
   param([string]$Message)
   [Console]::Error.WriteLine("[legavis-skills] $Message")
   exit 1
-}
-
-# 读清单：每行一个技能目录名，# 之后是注释，空行忽略
-function Get-ManifestNames {
-  param([string]$Path)
-  $names = [System.Collections.Generic.List[string]]::new()
-  foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
-    $name = ($line -split '#', 2)[0].Trim()
-    if ([string]::IsNullOrWhiteSpace($name)) { continue }
-    if ($name -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { Write-Fail "清单里的条目不是合法的技能目录名：'$name'" }
-    if (-not $names.Contains($name)) { $names.Add($name) }
-  }
-  return $names
-}
-
-function Get-LinkTarget {
-  param([System.IO.FileSystemInfo]$Item)
-  $target = $Item.Target
-  if ($null -eq $target -or @($target).Count -eq 0) { $target = $Item.LinkTarget }
-  return [string]@($target)[0]
 }
 
 # 目标是否落在源技能根里（判断陈旧联接该不该清）
@@ -85,7 +71,12 @@ if (Test-IsUnderRoot $ViewRoot $SourceRoot) { Write-Fail "视图根不能放在�
 if (Test-IsUnderRoot $SourceRoot $ViewRoot) { Write-Fail "源技能根不能放在视图根里面：$SourceRoot" }
 
 # ── 读清单并核对源目录 ──────────────────────────────────────
-$names = Get-ManifestNames $ManifestPath
+try {
+  $names = Get-LegavisManifestNames $ManifestPath
+}
+catch {
+  Write-Fail $_.Exception.Message
+}
 if ($names.Count -eq 0) { Write-Fail "清单是空的：$ManifestPath" }
 
 $missing = @($names | Where-Object { -not (Test-Path -LiteralPath (Join-Path $SourceRoot $_) -PathType Container) })
@@ -107,7 +98,7 @@ foreach ($item in @(Get-ChildItem -LiteralPath $ViewRoot -Force)) {
     Write-Host "[legavis-skills] 保留（不是联接，删不得）：$($item.Name)"
     continue
   }
-  $target = Get-LinkTarget $item
+  $target = Get-LegavisLinkTarget $item.FullName
   if ([string]::IsNullOrWhiteSpace($target) -or -not (Test-IsUnderRoot $target $SourceRoot)) {
     Write-Host "[legavis-skills] 保留（联接指向源技能根以外）：$($item.Name) -> $target"
     continue
@@ -130,7 +121,7 @@ foreach ($name in $names) {
     if (-not $isReparse) {
       Write-Fail "视图目录里的 '$name' 是真实目录/文件，不是联接；请人工处理后重跑（$viewPath）"
     }
-    $target = Get-LinkTarget $item
+    $target = Get-LegavisLinkTarget $viewPath
     if (-not [string]::IsNullOrWhiteSpace($target) -and
       [System.IO.Path]::GetFullPath($target).TrimEnd('\').Equals($sourcePath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
       $alreadyCorrect++
