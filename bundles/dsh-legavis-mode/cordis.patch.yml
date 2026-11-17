@@ -1,10 +1,10 @@
 # Legavis 推理模式（DSH agent preset）——模式包 @local/dsh-legavis-mode 的补丁层。
 #
 # 本文件是一层 Loader 补丁：向根条目列表插入一行 `preset-legavis`（`@deepseek-ai/dsh-agent-preset`）。
-# 插件清单逐行复制出厂 standard 模式（dsh-web-app/presets/standard.patch.yml），只在三处不同：
+# 插件清单逐行复制出厂 standard 模式（dsh-web-app/presets/standard.patch.yml），两处实质差异：
 #   1) persona 的 prefix 换成 legavis 的中文人设；
-#   2) skill-filesystem 关掉默认发现根、跟随符号链接，customSkillDirs 只指向白名单视图目录；
-#   3) 其余（工具行、计划组、压缩组、委派组）保持与 standard 一致。
+#   2) skill-filesystem 关掉默认发现根、跟随符号链接，customSkillDirs 只指向白名单视图目录。
+# 其余各行（工具行、计划组、压缩组、委派组）与 standard 一致。
 #
 # 与 standard 的两处刻意差异：
 #   - 不注入 dsh-agent-preset 自带的 skills 目录，所以本模式看不到 `dsh-doc`（预期结果）。
