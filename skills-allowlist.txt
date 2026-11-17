@@ -1,0 +1,53 @@
+# 技能白名单（Skill Whitelist）——legavis 模式的单一真相源
+#
+# 每行一个技能目录名，对应 <源根>\<技能名>\SKILL.md。
+# 以 # 开头的行是分区注释，空行忽略；行内 # 之后的内容视为注释。
+#
+# 源根默认 C:\Users\HUAWEI\.agents\skills
+# 视图根默认 C:\Users\HUAWEI\.dsh\legavis-skills
+# 变更方式：只改本文件，然后重跑 tools/legavis-skills/New-LegavisSkillView.ps1。
+# 插件注册型技能（prc-legal-research 四件套、office 四件套等）在全局层，模式移不掉，故不在本清单内。
+
+# ── legavis / 法律研究系（13 个）────────────────────────────
+legal-subsumption
+setup-legavis-skill
+legavis-intake
+legavis-spec
+legavis-report
+atomic-syllogism
+attribution-analysis
+factual-evidence
+logical-verification
+normative-analysis
+provisional-risk-assessment
+reasoning-process-audit
+prc-legal-research
+
+# ── matt 系列（27 个）──────────────────────────────────────
+ask-matt
+code-review
+codebase-design
+diagnosing-bugs
+domain-modeling
+grill-me
+grill-with-docs
+grilling
+handoff
+implement
+implement-spec
+improve-codebase-architecture
+pr
+prototype
+research
+retro
+setup-matt-pocock-skills
+tdd
+teach
+to-questionnaire
+to-spec
+to-tickets
+triage
+wait-what
+wayfinder
+wizard
+writing-for-agents
